@@ -1,26 +1,286 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Otherthan palette — pure black and pure white, maximum contrast.
+     ink-deep is the ink used on the orange ground, where it is kept as its
+     own token so that surface can be tuned without touching the rest.
+     Orange is the single accent: the footer field and the header mark. */
+  --color-ink: #000000;
+  --color-ink-deep: #000000;
+  --color-bone: #ffffff;
+  --color-signal: #fe2f00;
+
+  --font-display: var(--font-display-face), "Anton", system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, "SFMono-Regular", monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  background: var(--color-bone);
+  color: var(--color-ink);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ─────────────────────────────────────────────────────────────────────────
+   TYPE SYSTEM
+
+   Anton is an all-caps display face with a 0.859em cap-height. Two rules
+   drive every heading, so nothing is hand-tuned per element:
+
+   1. LEADING. For all-caps, the visible gap between rows is
+      (line-height − cap-height). A leading below 0.859 makes caps collide.
+      Optically, big type wants a proportionally smaller gap than small type:
+      ~13% of size at 100px, ~10% at 200px, ~8% at 470px. Across the whole
+      display range that lands between 0.94 and 0.99, so a single value of
+      0.96 sits within ~2% of ideal everywhere — one token, not six guesses.
+      It yields a constant 10.1% optical gap at every size.
+
+   2. TRACKING. Tightens as size grows, on track = −0.005em − (size/10000).
+      Rounded to 0.005em steps that is −0.015 / −0.025 / −0.05em for the
+      ~100 / ~200 / ~470px tiers.
+
+   Body/UI text keeps the Figma values: 11px labels at ratio 1.0, 16px
+   paragraphs at 1.3. Labels that WRAP get leading back via .text-label-wrap,
+   because ratio 1.0 collides the moment a label runs to a second line.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* All-caps display leading: cap-height (0.859) + a 10.1% optical gap. */
+.display-leading {
+  line-height: 0.96;
+}
+
+.text-label {
+  font-size: 0.6875rem; /* 11px */
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.text-body {
+  font-size: 1rem; /* 16px */
+  line-height: 1.3;
+}
+
+/* A label that is allowed to wrap needs leading back, or the lines collide at
+   ratio 1.0. 1.45 matches the label's own optical rhythm when stacked. */
+.text-label-wrap {
+  line-height: 1.45;
+}
+
+/* Hero headline. The lines are nowrap, so the size must keep shrinking with the
+   viewport or they run off a phone screen — hence no clamp floor. The rem term
+   absorbs the fixed side gutters, which vw alone cannot on narrow screens. */
+.headline-line {
+  font-size: min(calc(13vw - 0.5rem), 22vh);
+  font-weight: 400; /* Anton ships one weight; 900 would synthesise a fake bold */
+  line-height: 0.96; /* see TYPE SYSTEM: cap 0.859 + 10.1% optical gap */
+  letter-spacing: -0.025em; /* ~180px tier */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   HERO SCENE  (Figma 789:267)
+
+   Red-to-black gradient image with pointer-driven layers, fed by the custom properties
+   HeroScene publishes (--px/--py parallax, --mx/--my spotlight centre, --spot
+   presence). Motion rules are gated behind [data-live], which the client
+   component only sets on a fine pointer with motion allowed.
+   ───────────────────────────────────────────────────────────────────────── */
+.hero-scene {
+  --px: 0;
+  --py: 0;
+  --mx: 50%;
+  --my: 50%;
+  --spot: 0;
+}
+
+/* Torch that lifts the ground around the pointer. Its opacity rides --spot so
+   it fades in when a pointer arrives and out when it leaves. */
+.hero-scene__torch {
+  opacity: 0;
+  background: radial-gradient(
+    circle 30rem at var(--mx) var(--my),
+    rgb(255 255 255 / 0.16) 0%,
+    rgb(255 255 255 / 0.05) 45%,
+    transparent 70%
+  );
+}
+.hero-scene[data-live] .hero-scene__torch {
+  opacity: var(--spot);
+  will-change: opacity, background;
+}
+
+/* Headline drifts a touch with the pointer, against the still ground. */
+.hero-scene[data-live] .hero-scene__headline {
+  transform: translate3d(calc(var(--px) * 10px), calc(var(--py) * 6px), 0);
+  will-change: transform;
+}
+
+/* Marquee. Figma: Anton 151.888px at a 1536 frame (= 9.89vw), line-height
+   145.812px (= 0.96, our display leading), tracking -3.7972px (= -0.025em).
+   Two identical copies, each carrying its own trailing gap, so a -50% shift
+   loops seamlessly (same trick as the footer ticker). */
+/* Full bleed: the negative margin cancels the hero's side padding (px-5 /
+   md:px-9) plus 1.5rem more, so the clip edge sits OFF-screen. The text then
+   runs all the way out past the viewport edge instead of vanishing at the
+   gutter, and the ±10px pointer drift on the h1 never uncovers a gap. The
+   section's own overflow-hidden does the visible clipping. */
+.hero-marquee {
+  --bleed: calc(1.25rem + 1.5rem);
+  display: block;
+  margin-inline: calc(-1 * var(--bleed));
+  overflow: hidden;
+  color: var(--color-ink);
+}
+@media (width >= 48rem) {
+  .hero-marquee {
+    --bleed: calc(2.25rem + 1.5rem);
+  }
+}
+.hero-marquee__track {
+  display: flex;
+  width: max-content;
+  animation: hero-marquee 28s linear infinite;
+  will-change: transform;
+}
+.hero-marquee__copy {
+  flex: none;
+  padding-right: 0.6em;
+  font-size: clamp(3rem, 9.89vw, 9.5rem);
+  line-height: 0.96;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+@keyframes hero-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Entrance: the headline fades up. */
+@keyframes hero-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
+.hero-marquee {
+  animation: hero-fade 1.1s 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Reduced motion: no entrance, no scroll. A clipped, static single line
+   would be unreadable, so the marquee falls back to the stacked three-line
+   setting: only the first copy shows, wrapped and centred, at the same size
+   the headline used before. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-marquee,
+  .hero-marquee__track {
+    animation: none;
+  }
+  .hero-marquee {
+    margin-inline: 0; /* static text stays inside the gutters */
+  }
+  .hero-marquee__track {
+    width: 100%;
+    justify-content: center;
+  }
+  .hero-marquee__copy {
+    padding-right: 0;
+    white-space: normal;
+    text-align: center;
+    text-wrap: balance;
+    font-size: min(calc(13vw - 0.5rem), 22vh);
+  }
+  .hero-marquee__copy + .hero-marquee__copy {
+    display: none;
+  }
+}
+
+/* From the md breakpoint the side gutters grow to 36px and the footer rail
+   returns to one row, so the type is sized against the padded container. */
+@media (width >= 48rem) {
+  .headline-line {
+    font-size: min(calc(13vw - 1.2rem), 22vh, 11.25rem);
+  }
+}
+
+/* Partners (Figma 749:2355). Heading is 207.36px in the comp, but the longest
+   line here is "GOOD COMPANY." — sized so it clears the container. */
+.partners-title {
+  font-size: min(calc(14vw - 1.2rem), 12.96rem);
+  letter-spacing: -0.025em; /* ~196px tier */
+}
+
+/* Client wordmarks in the partners grid. Sized against the cell, not the
+   viewport, so the longest name ("Three Point Jersey") stays inside it. */
+.partner-mark {
+  font-size: clamp(0.95rem, 2.1vw, 1.75rem);
+  letter-spacing: -0.01em;
+}
+
+/* Selected Work (Figma 749:2401). The heading is 207.36px in the comp. */
+.selected-work-title {
+  font-size: min(calc(13.5vw - 1rem), 12.96rem);
+  letter-spacing: -0.025em; /* ~191px tier */
+}
+
+/* Drives the horizontal rail: every card's height and width are derived from
+   this one value, so the whole row scales together and keeps its proportions. */
+.work-rail {
+  --rail-height: clamp(18rem, 42vw, 40.1rem);
+}
+
+/* Footer (Figma 749:2822). The CTA is 102px in the comp; the wordmark is the
+   full-bleed OTHERTHAN lockup, sized to the container rather than a fixed px. */
+.footer-cta {
+  font-size: min(9vw, 6.375rem);
+  letter-spacing: -0.015em; /* ~102px tier */
+}
+
+/* Sized so the wordmark spans the padded container edge to edge, as the comp draws
+   it. The rem term absorbs the fixed side gutters, which pure vw cannot —
+   without it the wordmark overflows on narrow screens. */
+.footer-wordmark {
+  font-size: calc(21vw - 1rem);
+  letter-spacing: -0.05em; /* ~300px tier */
+}
+
+/* Ticker: the track holds two identical copies, so shifting it by exactly half
+   its width loops seamlessly. */
+@keyframes marquee-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.marquee {
+  animation: marquee-scroll 48s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee {
+    animation: none;
+  }
+}
+
+/* Service rows (Figma 749:2297). Below xl the title owns the full container
+   width; from xl it shares the row with the number (40px) and the description
+   (337px), so the type is then sized against that narrower column. The 337px
+   column only earns its place on a wide viewport, hence xl and not md. */
+.service-line {
+  font-size: calc(11.5vw - 0.9rem);
+  letter-spacing: -0.02em; /* ~135px tier */
+}
+
+@media (width >= 80rem) {
+  .service-line {
+    font-size: min(calc(9.5vw - 0.8rem), 9.1rem);
+  }
+}
+
